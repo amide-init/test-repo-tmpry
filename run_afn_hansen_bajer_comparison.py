@@ -412,25 +412,71 @@ class AFNHansenBajerComparison:
 
     def save_results(self):
         """Save results to JSON files"""
+        
+        # Convert numpy arrays to lists for JSON serialization
+        def convert_for_json(obj):
+            if isinstance(obj, dict):
+                return {k: convert_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_for_json(item) for item in obj]
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            else:
+                return obj
+        
+        # Convert results
+        results_converted = convert_for_json(self.results)
+        metrics_converted = convert_for_json(self.metrics)
+        
         # Save detailed results
         with open(os.path.join(self.output_dir, "results.json"), "w") as f:
-            json.dump(self.results, f, indent=2, default=str)
+            json.dump(results_converted, f, indent=2, default=str)
+        
+        # Save detailed runs (compatible format with plotting utilities)
+        runs_data = {}
+        for test_key, alg_results in self.results.items():
+            parts = test_key.split('_')
+            func_id = parts[0].replace('f', '')
+            dim = parts[1].replace('d', '')
+            
+            for alg_name, runs in alg_results.items():
+                # Create key in format expected by plotter
+                new_key = f"func{func_id}_dim{dim}_{alg_name}"
+                runs_data[new_key] = convert_for_json(runs)
+        
+        with open(os.path.join(self.output_dir, "runs.json"), "w") as f:
+            json.dump(runs_data, f, indent=2, default=str)
         
         # Save metrics summary
         with open(os.path.join(self.output_dir, "metrics_summary.json"), "w") as f:
-            json.dump(self.metrics, f, indent=2, default=str)
+            json.dump(metrics_converted, f, indent=2, default=str)
 
     def create_comparison_plots(self):
         """Create COCO-style CDF comparison plots"""
         if not self.results:
             return
         
-        print("✓ Generating CDF plots...")
+        print("\nCreating Comparison Plots...")
         
-        # Use ComparisonPlotter to create CDF plots
+        # Convert results format from {f1_d2: {AFN: [...], Hansen: [...]}}
+        # to {func1_dim2_AFN: [...], func1_dim2_Hansen: [...]} for plotter
+        converted_results = {}
+        for test_key, alg_results in self.results.items():
+            # Parse test_key like "f1_d2" to extract function and dimension
+            parts = test_key.split('_')
+            func_id = parts[0].replace('f', '')
+            dim = parts[1].replace('d', '')
+            
+            # Convert each algorithm's results
+            for alg_name, runs in alg_results.items():
+                # Create key in format expected by plotter: "func1_dim2_AFN-CMA-ES"
+                new_key = f"func{func_id}_dim{dim}_{alg_name}"
+                converted_results[new_key] = runs
+        
+        # Use ComparisonPlotter with converted format
         # Note: Budgets must be expressed as multiples of the dimension (COCO standard)
         self.plotter.create_all_plots(
-            results=self.results,
+            results=converted_results,
             metrics_summary=self.metrics,
             optimum=0.0  # BBOB functions have optimum at 0.0
         )
