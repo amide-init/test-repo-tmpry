@@ -50,6 +50,7 @@ The **Adaptive Fidelity Nexus (AFN)** is a novel methodology that adaptively imp
 #### For Windows (PowerShell/Command Prompt)
 
 ```powershell
+python -m venv .venv
 # Create virtual environment
 python -m venv .venv
 
