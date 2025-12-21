@@ -2,3 +2,6 @@
 __pycache__/
 **/__pycache__/
 results/**/runs.json
+exdata
+ppdata
+data/coco-archive/

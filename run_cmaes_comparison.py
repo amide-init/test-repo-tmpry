@@ -45,11 +45,11 @@ from utils import MetricsCalculator, convert_to_json, parse_list_arg, setup_seed
 class OptimizationComparison:
     """Orchestrates comparison between AFN and CMA-ES variants"""
     
-    ALL_ALGORITHMS = ["AFN", "CMA-ES", "AFN-CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES"]
+    ALL_ALGORITHMS = ["AFN", "CMA-ES", "AFN-CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES", "BIPOP-CMA-ES"]
     
     # Algorithms available in COCO archive (use existing datasets, don't run new experiments)
     # These are published algorithms that should use COCO archive datasets for fair comparison
-    COCO_ARCHIVE_ALGORITHMS = ["CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES"]
+    COCO_ARCHIVE_ALGORITHMS = ["CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES", "BIPOP-CMA-ES"]
     
     # Novel algorithms (run new experiments with COCO observers)
     # Only truly novel algorithms should use local implementations
@@ -200,25 +200,59 @@ class OptimizationComparison:
             "CMA-ES": "CMA-ES",  # Standard name in COCO archive
             "LQ-CMA-ES": "CMA-ES-LQ",  # Linear-Quadratic variant (Hansen et al.)
             "DTS-CMA-ES": "CMA-ES-DTS",  # Dynamic Threshold Selection (Bajer et al.)
-            "LMM-CMA-ES": "CMA-ES-LMM"  # Local Meta-Model (Loshchilov et al.)
+            "LMM-CMA-ES": "CMA-ES-LMM",  # Local Meta-Model (Loshchilov et al.)
+            "BIPOP-CMA-ES": "BIPOP-CMA-ES"  # BIPOP variant (Hansen, 2009)
         }
         
         coco_alg_name = archive_name_map.get(algorithm_name, algorithm_name)
         
         # Find matching .dat files in COCO archive directory
-        # COCO .dat file format: algorithm_bbob_f001_i01_d02.dat
-        pattern = os.path.join(
-            self.coco_archive_dir,
-            f"{coco_alg_name}_bbob_f{func_id:03d}_i*_d{dimension:02d}.dat"
-        )
-        dat_files = glob.glob(pattern)
+        # Check multiple locations:
+        # 1. results/.../coco_archive/ (per-run directory)
+        # 2. data/coco-archive/ (shared archive directory)
+        archive_locations = [
+            self.coco_archive_dir,  # Per-run directory
+            os.path.join('data', 'coco-archive'),  # Shared archive directory
+        ]
+        
+        dat_files = []
+        
+        # Try standard format first: algorithm_bbob_f001_i01_d02.dat
+        for archive_dir in archive_locations:
+            pattern1 = os.path.join(
+                archive_dir,
+                f"{coco_alg_name}_bbob_f{func_id:03d}_i*_d{dimension:02d}.dat"
+            )
+            found_files = glob.glob(pattern1)
+            if found_files:
+                dat_files.extend(found_files)
+                break
+        
+        # Try bbobexp format if standard format not found
+        if not dat_files:
+            for archive_dir in archive_locations:
+                # Check for bbobexp format: AlgorithmName/data_fN/bbobexp_fN_DIMd.dat
+                bbobexp_pattern = os.path.join(
+                    archive_dir,
+                    coco_alg_name,
+                    f"data_f{func_id}",
+                    f"bbobexp_f{func_id}_DIM{dimension}.dat"
+                )
+                if os.path.exists(bbobexp_pattern):
+                    dat_files = [bbobexp_pattern]
+                    break
         
         if not dat_files:
             if verbose:
-                print(f"    ⚠ No .dat files found matching pattern: {pattern}")
+                print(f"    ⚠ No .dat files found matching patterns:")
+                print(f"      Checked locations:")
+                for archive_dir in archive_locations:
+                    print(f"        - {archive_dir}")
+                    print(f"          Standard: {os.path.join(archive_dir, f'{coco_alg_name}_bbob_f{func_id:03d}_i*_d{dimension:02d}.dat')}")
+                    print(f"          bbobexp: {os.path.join(archive_dir, coco_alg_name, f'data_f{func_id}', f'bbobexp_f{func_id}_DIM{dimension}.dat')}")
                 print(f"    Please download datasets from COCO archive:")
-                print(f"    https://github.com/numbbo/coco/tree/master/data-archive")
-                print(f"    Place .dat files in: {self.coco_archive_dir}")
+                print(f"    https://numbbo.github.io/data-archive/")
+                print(f"    Place .dat files in: {self.coco_archive_dir} or data/coco-archive/")
             return []
         
         if verbose:
@@ -230,67 +264,140 @@ class OptimizationComparison:
         
         for dat_file in sorted(dat_files):
             try:
-                # Parse COCO .dat file format
-                # Format: % evaluation_number function_value
-                # Lines starting with % are comments
-                evaluations = []
-                function_values = []
+                filename = os.path.basename(dat_file)
+                is_bbobexp_format = 'bbobexp' in filename.lower()
                 
-                with open(dat_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith('%'):
-                            continue
-                        
-                        # Parse data line: evaluation_number function_value
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            try:
-                                eval_num = int(float(parts[0]))
-                                func_val = float(parts[1])
-                                evaluations.append(eval_num)
-                                function_values.append(func_val)
-                            except (ValueError, IndexError):
+                if is_bbobexp_format:
+                    # Parse bbobexp format: multiple runs per file
+                    # Format: % header line, then evaluation | fitness - Fopt | best fitness - Fopt | ...
+                    # Each run starts with a % comment line
+                    runs_data = []
+                    current_run = {'evaluations': [], 'function_values': []}
+                    
+                    with open(dat_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
                                 continue
+                            
+                            if line.startswith('%'):
+                                # New run starts - save previous run if it has data
+                                if current_run['evaluations']:
+                                    runs_data.append(current_run)
+                                    current_run = {'evaluations': [], 'function_values': []}
+                                continue
+                            
+                            # Parse data line: evaluation fitness - Fopt best fitness - Fopt ...
+                            # Format is space-separated (not pipe-separated like the header)
+                            # Column 0: evaluation number
+                            # Column 1: noise-free fitness - Fopt (this is the function value we want)
+                            # Note: values may have + or - prefix (e.g., +8.463928927e+00)
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                try:
+                                    eval_num = int(float(parts[0].strip()))
+                                    # Column 1 is "noise-free fitness - Fopt", which is the function value
+                                    # Handle + prefix (e.g., +8.463928927e+00)
+                                    func_val_str = parts[1].strip()
+                                    func_val = float(func_val_str)
+                                    current_run['evaluations'].append(eval_num)
+                                    current_run['function_values'].append(func_val)
+                                except (ValueError, IndexError) as e:
+                                    if verbose:
+                                        print(f"      Warning: Failed to parse line: {line[:50]}... (Error: {e})")
+                                    continue
+                    
+                    # Don't forget the last run
+                    if current_run['evaluations']:
+                        runs_data.append(current_run)
+                    
+                    if verbose and not runs_data:
+                        print(f"      Warning: No runs extracted from {filename}. File may be empty or in unexpected format.")
+                    
+                    # Create results for each run
+                    for run_idx, run_data in enumerate(runs_data):
+                        if run_data['evaluations'] and run_data['function_values']:
+                            result = {
+                                'best_y': min(run_data['function_values']),
+                                'history': run_data['function_values'],
+                                'y_history': run_data['function_values'],
+                                'evaluation_count': len(run_data['evaluations']),
+                                'execution_time': 0.0,
+                                'algorithm': algorithm_name,
+                                'function_id': func_id,
+                                'dimension': dimension,
+                                'run': run_idx,  # 0-based run index
+                                'best_x': None,
+                                'converged': False
+                            }
+                            results.append(result)
+                            
+                            if verbose:
+                                print(f"      Loaded run {run_idx + 1} from {filename} "
+                                      f"({len(run_data['evaluations'])} evaluations, best={result['best_y']:.6e})")
                 
-                if evaluations and function_values:
-                    # Extract instance number from filename
-                    # Format: algorithm_bbob_f001_i01_d02.dat
-                    filename = os.path.basename(dat_file)
-                    instance = 1
-                    try:
+                else:
+                    # Parse standard COCO .dat file format
+                    # Format: % evaluation_number function_value
+                    # Lines starting with % are comments
+                    evaluations = []
+                    function_values = []
+                    
+                    with open(dat_file, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith('%'):
+                                continue
+                            
+                            # Parse data line: evaluation_number function_value
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                try:
+                                    eval_num = int(float(parts[0]))
+                                    func_val = float(parts[1])
+                                    evaluations.append(eval_num)
+                                    function_values.append(func_val)
+                                except (ValueError, IndexError):
+                                    continue
+                    
+                    if evaluations and function_values:
                         # Extract instance number from filename
-                        parts = filename.split('_')
-                        for part in parts:
-                            if part.startswith('i'):
-                                instance = int(part[1:])
-                                break
-                    except:
-                        pass
-                    
-                    # Create result dictionary matching format from run_single_test
-                    result = {
-                        'best_y': min(function_values),
-                        'history': function_values,
-                        'y_history': function_values,
-                        'evaluation_count': len(evaluations),
-                        'execution_time': 0.0,  # Not available in archive data
-                        'algorithm': algorithm_name,
-                        'function_id': func_id,
-                        'dimension': dimension,
-                        'run': instance - 1,  # Convert instance to 0-based run index
-                        'best_x': None,  # Not available in .dat files
-                        'converged': False
-                    }
-                    results.append(result)
-                    
-                    if verbose:
-                        print(f"      Loaded: {os.path.basename(dat_file)} "
-                              f"({len(evaluations)} evaluations, best={result['best_y']:.6e})")
+                        # Format: algorithm_bbob_f001_i01_d02.dat
+                        instance = 1
+                        try:
+                            parts = filename.split('_')
+                            for part in parts:
+                                if part.startswith('i'):
+                                    instance = int(part[1:])
+                                    break
+                        except:
+                            pass
+                        
+                        # Create result dictionary matching format from run_single_test
+                        result = {
+                            'best_y': min(function_values),
+                            'history': function_values,
+                            'y_history': function_values,
+                            'evaluation_count': len(evaluations),
+                            'execution_time': 0.0,  # Not available in archive data
+                            'algorithm': algorithm_name,
+                            'function_id': func_id,
+                            'dimension': dimension,
+                            'run': instance - 1,  # Convert instance to 0-based run index
+                            'best_x': None,  # Not available in .dat files
+                            'converged': False
+                        }
+                        results.append(result)
+                        
+                        if verbose:
+                            print(f"      Loaded: {filename} "
+                                  f"({len(evaluations)} evaluations, best={result['best_y']:.6e})")
             
             except Exception as e:
                 if verbose:
                     print(f"      ✗ Error loading {os.path.basename(dat_file)}: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
         
         if verbose and results:
@@ -314,40 +421,107 @@ class OptimizationComparison:
             "CMA-ES": "CMA-ES",
             "LQ-CMA-ES": "CMA-ES-LQ",
             "DTS-CMA-ES": "CMA-ES-DTS",
-            "LMM-CMA-ES": "CMA-ES-LMM"
+            "LMM-CMA-ES": "CMA-ES-LMM",
+            "BIPOP-CMA-ES": "BIPOP-CMA-ES"
         }
         
         coco_alg_name = archive_name_map.get(algorithm_name, algorithm_name)
         
         # Find .dat files in archive directory
-        pattern = os.path.join(
-            self.coco_archive_dir,
-            f"{coco_alg_name}_bbob_f{func_id:03d}_i*_d{dimension:02d}.dat"
-        )
-        dat_files = glob.glob(pattern)
+        # Check multiple locations: results/.../coco_archive/ and data/coco-archive/
+        archive_locations = [
+            self.coco_archive_dir,  # Per-run directory
+            os.path.join('data', 'coco-archive'),  # Shared archive directory
+        ]
+        
+        dat_files = []
+        
+        # Try standard format first
+        for archive_dir in archive_locations:
+            pattern = os.path.join(
+                archive_dir,
+                f"{coco_alg_name}_bbob_f{func_id:03d}_i*_d{dimension:02d}.dat"
+            )
+            found_files = glob.glob(pattern)
+            if found_files:
+                dat_files.extend(found_files)
+                break
+        
+        # Try bbobexp format if standard format not found
+        if not dat_files:
+            for archive_dir in archive_locations:
+                bbobexp_file = os.path.join(
+                    archive_dir,
+                    coco_alg_name,
+                    f"data_f{func_id}",
+                    f"bbobexp_f{func_id}_DIM{dimension}.dat"
+                )
+                if os.path.exists(bbobexp_file):
+                    dat_files = [bbobexp_file]
+                    break
         
         if not dat_files:
             return
         
         # Copy to coco_logs directory
+        # For bbobexp format, preserve directory structure with algorithm name
         copied_count = 0
-        for dat_file in dat_files:
-            try:
-                filename = os.path.basename(dat_file)
-                dest_path = os.path.join(self.coco_output_dir, filename)
-                
-                # Only copy if not already exists (avoid overwriting)
-                if not os.path.exists(dest_path):
-                    shutil.copy2(dat_file, dest_path)
+        is_bbobexp = any('bbobexp' in os.path.basename(f).lower() for f in dat_files)
+        
+        if is_bbobexp:
+            # For bbobexp format: copy entire algorithm directory structure
+            # Structure: AlgorithmName/data_fN/bbobexp_fN_DIMd.dat and AlgorithmName/bbobexp_fN.info
+            source_alg_dir = os.path.dirname(os.path.dirname(dat_files[0]))  # Go up from data_fN to AlgorithmName
+            dest_alg_dir = os.path.join(self.coco_output_dir, coco_alg_name)
+            os.makedirs(dest_alg_dir, exist_ok=True)
+            
+            # Copy .info files for this function
+            info_file = os.path.join(source_alg_dir, f"bbobexp_f{func_id}.info")
+            if os.path.exists(info_file):
+                dest_info = os.path.join(dest_alg_dir, f"bbobexp_f{func_id}.info")
+                if not os.path.exists(dest_info):
+                    shutil.copy2(info_file, dest_info)
                     copied_count += 1
                     if verbose:
-                        print(f"      Copied: {filename} → coco_logs/")
-            except Exception as e:
-                if verbose:
-                    print(f"      ⚠ Failed to copy {os.path.basename(dat_file)}: {e}") 
+                        print(f"      Copied: bbobexp_f{func_id}.info → {coco_alg_name}/")
+            
+            # Copy data directory structure
+            source_data_dir = os.path.dirname(dat_files[0])  # data_fN directory
+            dest_data_dir = os.path.join(dest_alg_dir, os.path.basename(source_data_dir))
+            os.makedirs(dest_data_dir, exist_ok=True)
+            
+            # Copy all .dat and .tdat files for this function and dimension
+            for dat_file in dat_files:
+                try:
+                    filename = os.path.basename(dat_file)
+                    dest_path = os.path.join(dest_data_dir, filename)
+                    if not os.path.exists(dest_path):
+                        shutil.copy2(dat_file, dest_path)
+                        copied_count += 1
+                        if verbose:
+                            print(f"      Copied: {filename} → {coco_alg_name}/{os.path.basename(dest_data_dir)}/")
+                except Exception as e:
+                    if verbose:
+                        print(f"      ⚠ Failed to copy {os.path.basename(dat_file)}: {e}")
+        else:
+            # Standard format: copy .dat files directly
+            for dat_file in dat_files:
+                try:
+                    filename = os.path.basename(dat_file)
+                    dest_path = os.path.join(self.coco_output_dir, filename)
+                    
+                    # Only copy if not already exists (avoid overwriting)
+                    if not os.path.exists(dest_path):
+                        shutil.copy2(dat_file, dest_path)
+                        copied_count += 1
+                        if verbose:
+                            print(f"      Copied: {filename} → coco_logs/")
+                except Exception as e:
+                    if verbose:
+                        print(f"      ⚠ Failed to copy {os.path.basename(dat_file)}: {e}") 
         
         if verbose and copied_count > 0:
-            print(f"    ✓ Copied {copied_count} .dat file(s) to coco_logs/ for cocopp processing")
+            print(f"    ✓ Copied {copied_count} file(s) to coco_logs/ for cocopp processing")
     
     def run_single_test(self, func_id: int, dimension: int, 
                        algorithm_name: str, run_idx: int, seed: int) -> Dict:
