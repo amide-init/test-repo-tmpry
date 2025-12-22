@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """
-AFN vs CMA-ES Variants Comparison
-Compares AFN algorithm with different CMA-ES variants with surrogate modeling:
+AFN vs AFN-CMA-ES Comparison
+Compares the AFN algorithm with its CMA-ES-based variant using surrogate modeling:
 - AFN: Standalone AFN algorithm
-- CMA-ES: Standard CMA-ES
-- AFN-CMA-ES: CMA-ES with AFN Random Forest ensemble
-- LQ-CMA-ES: CMA-ES with Linear-Quadratic surrogate
-- DTS-CMA-ES: CMA-ES with Dynamic Threshold Selection
-- LMM-CMA-ES: CMA-ES with Local Meta-Model
+- AFN-CMA-ES: CMA-ES with AFN ensemble surrogate
 """
 
 import argparse
@@ -43,13 +39,14 @@ from utils import MetricsCalculator, convert_to_json, parse_list_arg, setup_seed
 
 
 class OptimizationComparison:
-    """Orchestrates comparison between AFN and CMA-ES variants"""
+    """Orchestrates comparison between AFN and AFN-CMA-ES"""
     
-    ALL_ALGORITHMS = ["AFN", "CMA-ES", "AFN-CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES", "BIPOP-CMA-ES"]
+    # Supported algorithms for this script
+    ALL_ALGORITHMS = ["AFN", "AFN-CMA-ES"]
     
     # Algorithms available in COCO archive (use existing datasets, don't run new experiments)
-    # These are published algorithms that should use COCO archive datasets for fair comparison
-    COCO_ARCHIVE_ALGORITHMS = ["CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES", "BIPOP-CMA-ES"]
+    # For this script we only use novel algorithms, so this list is intentionally empty.
+    COCO_ARCHIVE_ALGORITHMS = []
     
     # Novel algorithms (run new experiments with COCO observers)
     # Only truly novel algorithms should use local implementations
@@ -815,78 +812,38 @@ class OptimizationComparison:
             print("      JSON files are optional (not COCO standard)")
         self.save_results(save_json=False)  # Set to True if you want optional JSON files
         
-        # Run COCO post-processing (cocopp) to generate standardized plots
-        if COCO_AVAILABLE and verbose:
-            print("\n" + "="*80)
-            print("RUNNING COCO POST-PROCESSING (COCOPP)...")
-            print("="*80)
-            try:
-                # cocopp.main() expects command-line arguments (argv)
-                # It processes directories containing coco_logs subdirectories
-                # Pass the output directory (parent of coco_logs) as a string argument
-                import sys
-                original_argv = sys.argv.copy()
-                sys.argv = ['cocopp', self.output_dir]
-                try:
-                    # cocopp generates all standard COCO plots from .dat files
-                    cocopp.main()
-                    if verbose:
-                        print("✓ COCO post-processing completed successfully")
-                        # cocopp creates ppdata directory in current working directory
-                        # or in the output directory, check both
-                        ppdata_dir = os.path.join(self.output_dir, 'ppdata')
-                        cocopp_reports_dir = os.path.join(self.output_dir, 'cocopp_reports')
-                        if os.path.exists(ppdata_dir):
-                            print(f"  COCO plots generated in: {ppdata_dir}")
-                        elif os.path.exists(cocopp_reports_dir):
-                            print(f"  COCO plots generated in: {cocopp_reports_dir}")
-                        else:
-                            print(f"  COCO plots generated (check: {self.output_dir})")
-                finally:
-                    sys.argv = original_argv
-            except Exception as e:
-                print(f"⚠ Warning: COCO post-processing failed: {e}")
-                print("  You can run manually: python -m cocopp", self.output_dir)
-                import traceback
-                if verbose:
-                    traceback.print_exc()
-        
         return self.results, self.metrics_summary
 
 
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description='Compare AFN with CMA-ES variants on BBOB benchmark functions',
+        description='Compare AFN with AFN-CMA-ES on BBOB benchmark functions',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run AFN with Random Forest (default, fastest)
-  python3 run_cmaes_comparison.py --algorithms AFN --functions 1,2,3 --dimensions 2,5
+  # Run AFN with MLP surrogate (default)
+  python3 run_afn.py --algorithms AFN --functions 1,2,3 --dimensions 2,5
   
-  # Run AFN with MLP (neural network surrogate)
-  python3 run_cmaes_comparison.py --algorithms AFN --model_type mlp --functions 1,2,3 --dimensions 2,5
+  # Run AFN with Random Forest surrogate
+  python3 run_afn.py --algorithms AFN --model_type random_forest --functions 1,2,3 --dimensions 2,5
   
-  # Run AFN and standard CMA-ES
-  python3 run_cmaes_comparison.py --algorithms AFN,CMA-ES --functions 1,2,3 --dimensions 2,5
-  
-  # Compare Random Forest vs MLP for AFN
-  python3 run_cmaes_comparison.py --algorithms AFN --model_type random_forest --functions 1,2,3 --dimensions 2,5
-  python3 run_cmaes_comparison.py --algorithms AFN --model_type mlp --functions 1,2,3 --dimensions 2,5
+  # Run AFN and AFN-CMA-ES
+  python3 run_afn.py --algorithms AFN,AFN-CMA-ES --functions 1,2,3 --dimensions 2,5
   
   # Run only AFN-CMA-ES (AFN with CMA-ES)
-  python3 run_cmaes_comparison.py --algorithms AFN-CMA-ES --functions 1,2,3 --dimensions 2,5 --max_evals 500
+  python3 run_afn.py --algorithms AFN-CMA-ES --functions 1,2,3 --dimensions 2,5 --max_evals 500
   
-  # Run all available algorithms
-  python3 run_cmaes_comparison.py --algorithms all --functions 1,2,3 --dimensions 2,5 --max_evals 200
+  # Run all available algorithms (AFN and AFN-CMA-ES)
+  python3 run_afn.py --algorithms all --functions 1,2,3 --dimensions 2,5 --max_evals 200
   
   # Test on higher dimensions with more evaluations
-  python3 run_cmaes_comparison.py --algorithms AFN,CMA-ES --functions 1-5 --dimensions 10 --n_runs 30 --max_evals 1000 --verbose
+  python3 run_afn.py --algorithms AFN,AFN-CMA-ES --functions 1-5 --dimensions 10 --n_runs 30 --max_evals 1000 --verbose
         """
     )
     
-    parser.add_argument('--algorithms', type=str, default='AFN,CMA-ES',
-                       help='Algorithms to run (comma-separated). Options: AFN, CMA-ES, AFN-CMA-ES, LQ-CMA-ES, DTS-CMA-ES, LMM-CMA-ES, or "all" (default: AFN,CMA-ES)')
+    parser.add_argument('--algorithms', type=str, default='AFN,AFN-CMA-ES',
+                       help='Algorithms to run (comma-separated). Options: AFN, AFN-CMA-ES, or "all" (default: AFN,AFN-CMA-ES)')
     parser.add_argument('--functions', type=str, default='1,2,3',
                        help='Function IDs (comma-separated or range, e.g., "1,2,3" or "1-24") (default: 1,2,3)')
     parser.add_argument('--dimensions', type=str, default='2,5',
@@ -895,9 +852,9 @@ Examples:
                        help='Number of runs per test case (default: 10)')
     parser.add_argument('--max_evals', type=int, default=200,
                        help='Maximum function evaluations per run (default: 200)')
-    parser.add_argument('--model_type', type=str, default='random_forest',
+    parser.add_argument('--model_type', type=str, default='mlp',
                        choices=['random_forest', 'mlp'],
-                       help='Surrogate model type for AFN (random_forest or mlp) (default: random_forest)')
+                       help='Surrogate model type for AFN (random_forest or mlp) (default: mlp)')
     parser.add_argument('--output_dir', type=str, default='results',
                        help='Output directory for results (default: results)')
     parser.add_argument('--verbose', action='store_true',
@@ -916,7 +873,7 @@ def main():
     
     # Parse algorithms
     if args.algorithms.lower() == 'all':
-        algorithms = ["AFN", "CMA-ES", "AFN-CMA-ES", "LQ-CMA-ES", "DTS-CMA-ES", "LMM-CMA-ES"]
+        algorithms = ["AFN", "AFN-CMA-ES"]
     else:
         algorithms = [alg.strip() for alg in args.algorithms.split(',')]
     
@@ -948,42 +905,11 @@ def main():
     # Run comparison
     comparison.run(verbose=args.verbose)
     
-    # Success message
+    # Minimal success message
     print("\n" + "="*80)
     print("✓ Comparison completed successfully!")
     print("="*80)
     print(f"\nResults saved to: {comparison.output_dir}")
-    print("\nGenerated files (COCO-compliant):")
-    print("  - coco_logs/                   (COCO observer .dat files - REQUIRED)")
-    print("  - coco_archive/                (COCO archive datasets for baseline algorithms)")
-    if COCO_AVAILABLE:
-        # Check where cocopp actually generated plots
-        ppdata_dir = os.path.join(comparison.output_dir, 'ppdata')
-        cocopp_reports_dir = os.path.join(comparison.output_dir, 'cocopp_reports')
-        if os.path.exists(ppdata_dir):
-            print(f"  - ppdata/                      (COCO-compliant plots and reports)")
-        elif os.path.exists(cocopp_reports_dir):
-            print(f"  - cocopp_reports/              (COCO-compliant plots and reports)")
-        else:
-            print(f"  - ppdata/ or cocopp_reports/   (COCO-compliant plots - check output directory)")
-    print("\nOptional files (not COCO standard, for convenience only):")
-    print("  - runs.json                    (optional, not required for COCO)")
-    print("  - metrics_summary.json         (optional, not required for COCO)")
-    print("  - config.json                  (optional, not required for COCO)")
-    print("\nCOCO Compliance:")
-    print("  ✓ Using cocoex with observers (standardized evaluation procedure)")
-    print("  ✓ Results saved in COCO .dat format (standard format)")
-    print("  ✓ Using COCO archive datasets for baseline algorithms")
-    print("  ✓ Running new experiments only for novel algorithms (AFN, AFN-CMA-ES)")
-    print("  ✓ No custom JSON files required (COCO uses .dat files only)")
-    if COCO_AVAILABLE:
-        print("  ✓ Post-processed with cocopp (standardized plots)")
-    else:
-        print("  ⚠ Install cocopp for plot generation: pip install cocopp")
-        print("  Then run: python -m cocopp", comparison.coco_output_dir)
-    print("\nNote: For baseline algorithms (CMA-ES, LQ-CMA-ES, DTS-CMA-ES, LMM-CMA-ES):")
-    print("  Download datasets from: https://github.com/numbbo/coco/tree/master/data-archive")
-    print("  Place .dat files in:", comparison.coco_archive_dir)
     
     return 0
 
