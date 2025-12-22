@@ -5,3 +5,4 @@ results/**/runs.json
 exdata
 ppdata
 data/coco-archive/
+compares
