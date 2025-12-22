@@ -1,3 +1,0 @@
-suite = 'bbob', funcId = 14, DIM = 10, Precision = 1.000e-08, algId = 'ALG', coco_version = '2.8.2', logger = 'bbob', data_format = 'bbob-new2', settings = ''
-% 
-data_f14/bbobexp_f14_DIM10.dat, 5:200|3.9e+00

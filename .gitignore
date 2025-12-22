@@ -3,6 +3,10 @@ __pycache__/
 **/__pycache__/
 results/**/runs.json
 exdata
-ppdata
 data/coco-archive/
-compares
+compares/AFN-CMA-ES/
+compares/CMA-ES-2019/
+compares/LQ-CMA-ES/
+compares/DTS-CMA-ES/
+compares/LMM-CMA-ES/
+
