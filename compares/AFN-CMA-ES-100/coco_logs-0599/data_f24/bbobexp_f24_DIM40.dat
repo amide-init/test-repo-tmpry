@@ -1,0 +1,4 @@
+% f evaluations | g evaluations | best noise-free fitness - Fopt (-1.335900000000e+02) + sum g_i+ | measured fitness | best measured fitness or single-digit g-values | x1 | x2...
+1 0 +7.554900603e+02 +6.219000603e+02 +6.219000603e+02
+4 0 +7.231683822e+02 +5.895783822e+02 +5.895783822e+02
+50 0 +7.231683822e+02 +5.895783822e+02 +5.895783822e+02
