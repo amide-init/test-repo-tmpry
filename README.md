@@ -2,7 +2,7 @@
 
 **Paper Implementation**: "Artificial neural networks as surrogate models in optimization"
 
-This repository contains an **ensemble-based implementation** of the AFN algorithm for surrogate-based optimization using COCO/BBOB benchmark functions, with comparisons against GA, PSO, and ACO algorithms.
+This repository contains an **ensemble-based implementation** of the AFN algorithm for surrogate-based optimization using COCO/BBOB benchmark functions, with comparisons against CMA-ES variants.
 
 ## 📋 Table of Contents
 
@@ -10,9 +10,6 @@ This repository contains an **ensemble-based implementation** of the AFN algorit
 - [Key Features](#key-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-  - [AFN vs GA/PSO/ACO Comparison](#3-run-the-complete-comparison)
-  - [CMA-ES Variants Comparison](#4-run-cma-es-variants-comparison)
-  - [Hansen & Bajer Comparison](#5-run-hansen--bajer-comparison)
 - [Usage Examples](#usage-examples)
 - [Project Structure](#project-structure)
 - [Algorithm Details](#algorithm-details)
@@ -26,15 +23,14 @@ The **Adaptive Fidelity Nexus (AFN)** is a novel methodology that adaptively imp
 
 ### Key Features
 
-✅ **Ensemble Regressor Surrogate** using Random Forest Regressors  
+✅ **Ensemble Regressor Surrogate** using MLP (neural network)  
 ✅ **Real COCO/BBOB Benchmark Functions** (24 functions available)  
 ✅ **Paper-Accurate Implementation** (exact specifications)  
 ✅ **Uncertainty Quantification** via ensemble variance  
-✅ **GA, PSO, ACO Comparison** algorithms  
+✅ **CMA-ES Integration** with surrogate modeling  
 ✅ **Lightweight Dependencies** (minimal scikit-learn requirements)  
 ✅ **Command-Line Interface** for easy usage  
-✅ **Comprehensive Visualization** and metrics  
-✅ **No Heavy ML Dependencies** (PyTorch-free option)
+✅ **COCO-Compliant Output** for standardized comparisons
 
 ## 🔧 Installation
 
@@ -126,116 +122,147 @@ cocopp
 
 ## 🚀 Quick Start
 
-### 1. Set Up Virtual Environment (if not already done)
+### Step 1: Create Virtual Environment
 
 ```bash
-# Create and activate virtual environment (see Virtual Environment Setup section above)
+# Create virtual environment
 python -m venv .venv
+```
 
-# Windows:
-.\.venv\Scripts\Activate.ps1  # PowerShell
-# OR
-.venv\Scripts\activate.bat    # Command Prompt
+### Step 2: Activate Virtual Environment
 
-# macOS/Linux:
+**Windows (PowerShell):**
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt):**
+```cmd
+.venv\Scripts\activate.bat
+```
+
+**macOS/Linux:**
+```bash
 source .venv/bin/activate
+```
 
-# Install dependencies
+**Verify activation** (you should see `(.venv)` in your prompt):
+```bash
+python --version
+pip --version
+```
+
+### Step 3: Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Test Everything Works
+**Required packages:**
+- `scikit-learn>=1.1.0`
+- `numpy>=1.21.0`
+- `matplotlib>=3.5.0`
+- `coco-experiment`
+- `cocopp`
 
-First, verify that all components are working correctly:
+### Step 4: Run AFN-CMA-ES Experiments
+
+Run your proposed AFN-CMA-ES algorithm on BBOB benchmark functions:
 
 ```bash
-python -c "from afn.afn_core import AFNCore; print('✅ AFN ready!')"
+python run_afn.py --algorithms AFN-CMA-ES --functions 1-24 --dimensions 2,5,10,20,40 --n_runs 15 --max_evals 5000 --verbose
 ```
 
-### 3. Run the Complete Comparison
+**Command Explanation:**
+- `--algorithms AFN-CMA-ES`: Run only AFN-CMA-ES (your proposed algorithm)
+- `--functions 1-24`: Test on all 24 BBOB functions
+- `--dimensions 2,5,10,20,40`: Test on multiple dimensions
+- `--n_runs 15`: Run 15 independent trials per (function, dimension) combination
+- `--max_evals 5000`: Maximum function evaluations per run
+- `--verbose`: Show detailed progress during optimization
 
-Execute the full comparison of AFN vs GA vs PSO vs ACO:
+**Note:** The default `model_type` is `mlp` (neural network surrogate) as required by the paper.
+
+**Output:** Results will be saved in `results/cmaes_comparison_YYYYMMDD_HHMMSS/` with COCO-compliant `.dat` files in `coco_logs/` subdirectory.
+
+### Step 5: Download COCO Archive Data
+
+Download baseline algorithm datasets from the [COCO Data Archive](https://coco-platform.org/testsuites/bbob/data-archive.html):
+
+1. Visit: https://coco-platform.org/testsuites/bbob/data-archive.html
+2. Download datasets for comparison algorithms:
+   - **CMA-ES-2019**: Look for "CMA-ES" or "CMA-ES-2019" in the archive
+   - **LQ-CMA-ES**: Look for "LQ-CMA-ES" or "CMA-ES-LQ"
+   - **DTS-CMA-ES**: Look for "DTS-CMA-ES" or "CMA-ES-DTS"
+   - **LMM-CMA-ES**: Look for "LMM-CMA-ES" or "CMA-ES-LMM"
+3. Extract downloaded `.tgz` files
+4. Place extracted folders in the `compares/` directory:
+   ```
+   compares/
+   ├── AFN-CMA-ES/          # Your results (from Step 4)
+   ├── CMA-ES-2019/          # Downloaded archive data
+   ├── LQ-CMA-ES/            # Downloaded archive data
+   ├── DTS-CMA-ES/           # Downloaded archive data
+   └── LMM-CMA-ES/           # Downloaded archive data
+   ```
+
+**Important:** 
+- Rename your AFN-CMA-ES results folder to match the algorithm name format
+- Ensure folder names match exactly: `AFN-CMA-ES`, `CMA-ES-2019`, `LQ-CMA-ES`, `DTS-CMA-ES`, `LMM-CMA-ES`
+
+### Step 6: Run COCO Post-Processing
+
+Navigate to the `compares/` directory and run COCO post-processing:
 
 ```bash
-# Quick test (recommended first)
-python python run_cmaes_comparison.py --algorithms AFN-CMA-ES,CMA-ES,LQ-CMA-ES  --functions 1,2,3 --dimensions 5 --n_runs 10 --max_evals 50 --verbose                                                                                                                                      
+cd compares
+python -m cocopp 'AFN-CMA-ES' 'CMA-ES-2019' 'LQ-CMA-ES' 'DTS-CMA-ES' 'LMM-CMA-ES'
+```
 
-# Default comparison (Sphere, Rosenbrock, Rastrigin; 2D, 5D)
-python run_cmaes_comparison.py --algorithms AFN-CMA-ES,CMA-ES,LQ-CMA-ES  --functions 1,2,3 --dimensions 2,5 --n_runs 10 --max_evals 200 --verbose                                                                                                                                      
+**Command Explanation:**
+- `python -m cocopp`: Run COCO post-processing tool
+- `'AFN-CMA-ES' 'CMA-ES-2019' ...`: List of algorithm folder names to compare
+- This generates standardized comparison plots and tables
 
-# Full comparison with all functions and dimensions
-python run_cmaes_comparison.py --algorithms AFN-CMA-ES,CMA-ES,LQ-CMA-ES --model_type mlp --functions 1-24 --dimensions 10 --n_runs 15 --max_evals 500 --verbose                                                                                                                                      
+**Output:** 
+- Results are saved in `compares/ppdata/` directory
+- An `index.html` file is created - **open it in your browser** to view interactive comparison plots
+- ECDF (Empirical Cumulative Distribution Function) plots show performance across all functions
+- Comparison tables show detailed statistics
 
+### Directory Structure
 
-**Available Algorithms:**
+```
+project/
+├── .venv/                          # Virtual environment (created in Step 1)
+├── compares/                       # Comparison data directory
+│   ├── AFN-CMA-ES/                 # Your AFN-CMA-ES results
+│   │   └── coco_logs-XXXX/         # COCO observer output files
+│   │       └── data_fN/            # Function-specific data
+│   │           └── *.dat          # COCO data files
+│   ├── CMA-ES-2019/                # Downloaded archive data
+│   ├── LQ-CMA-ES/                  # Downloaded archive data
+│   ├── DTS-CMA-ES/                 # Downloaded archive data
+│   ├── LMM-CMA-ES/                 # Downloaded archive data
+│   └── ppdata/                     # COCO post-processing output
+│       ├── index.html              # Open this in browser!
+│       ├── *.pdf                   # Comparison plots
+│       └── *.tex                   # LaTeX tables
+├── results/                        # Raw experiment results
+│   └── cmaes_comparison_YYYYMMDD_HHMMSS/
+│       └── coco_logs/              # COCO-compliant output
+├── run_afn.py                      # Main experiment script
+└── requirements.txt                # Python dependencies
+```
+
+### Available Algorithms
+
 - `AFN`: Standalone AFN algorithm
-- `CMA-ES`: Standard CMA-ES
-- `AFN-CMA-ES`: CMA-ES with AFN Random Forest ensemble
-- `LQ-CMA-ES`: CMA-ES with Linear-Quadratic surrogate
-- `DTS-CMA-ES`: CMA-ES with Dynamic Threshold Selection
-- `LMM-CMA-ES`: CMA-ES with Local Meta-Model
-
-**Command Options:**
-- `--algorithms`: Algorithms to run (comma-separated or `all`)
-- `--functions`: BBOB function IDs (e.g., `1,2,3` or `1-24`)
-- `--dimensions`: Problem dimensions (e.g., `2,5,10`)
-- `--n_runs`: Number of runs per test case (default: 10)
-- `--max_evals`: Maximum evaluations per run (default: 200)
-- `--model_type`: Surrogate model (`random_forest` or `mlp`)
-- `--output_dir`: Results directory (default: `results`)
-- `--verbose`: Show detailed progress
-
-### 5. Run Hansen & Bajer Comparison
-
-Compare AFN-CMA-ES with state-of-the-art optimizers (Hansen CMA-ES and Bajer GP-EI):
-
-```bash
-# Install additional dependencies first
-pip install -r requirements_hansen_bajer.txt
-
-# Quick test (minimal settings for testing)
-python run_afn_hansen_bajer_comparison.py --quick
-
-# Quick test with functions 1 and 8 (Sphere and Rosenbrock)
-python run_afn_hansen_bajer_comparison.py --functions 1,8 --dimensions 2,5 --n_runs 5 --max_evals 2000 --verbose
-
-# Default comparison (functions 8,23; dimensions 2,5,10,20) with Random Forest
-python run_afn_hansen_bajer_comparison.py --functions 8,23 --dimensions 2,5,10,20 --n_runs 30 --max_evals 10000 --verbose
-
-# Full comparison with MLP Deep Ensemble
-python run_afn_hansen_bajer_comparison.py --model_type mlp --functions 8,23 --dimensions 2,5,10,20 --n_runs 30 --max_evals 10000 --verbose
-
-# Test all BBOB functions with range notation
-python run_afn_hansen_bajer_comparison.py --functions 1-24 --dimensions 2,5,10,20 --n_runs 30 --verbose
-```
-
-**Compared Algorithms:**
-- `AFN-CMA-ES`: AFN with CMA-ES integration (supports Random Forest or MLP)
-- `Hansen`: Hansen-style CMA-ES with surrogate assistance
-- `Bajer`: Bajer GP-EI (Gaussian Process with Expected Improvement)
-
-**Command Options:**
-- `--functions`: BBOB function IDs (e.g., `8,23` or `1-24`)
-- `--dimensions`: Problem dimensions (default: `2,5,10,20`)
-- `--n_runs`: Number of independent runs (default: 30)
-- `--max_evals`: Maximum evaluations per run (default: 10000)
-- `--target_precision`: Target precision for success rate (default: 1e-8)
-- `--model_type`: Surrogate model for AFN-CMA-ES (`random_forest` or `mlp`)
-- `--output_dir`: Results directory (default: `results`)
-- `--verbose`: Enable detailed progress output
-- `--quick`: Quick test mode (functions=[1], dimensions=[2], n_runs=2, max_evals=50)
-
-### 6. Test Individual Algorithms
-
-Test individual algorithms on simple functions:
-
-```bash
-# Test GA, PSO, ACO algorithms
-python -c "from afn.comparison_algorithms import test_algorithms; test_algorithms()"
-
-# Test simple functions
-python -c "from afn.simple_test_functions import test_all_functions; test_all_functions()"
-```
+- `AFN-CMA-ES`: CMA-ES with AFN MLP surrogate (your proposed algorithm)
+- `CMA-ES-2019`: Standard CMA-ES (from COCO archive)
+- `LQ-CMA-ES`: CMA-ES with Linear-Quadratic surrogate (from COCO archive)
+- `DTS-CMA-ES`: CMA-ES with Dynamic Threshold Selection (from COCO archive)
+- `LMM-CMA-ES`: CMA-ES with Local Meta-Model (from COCO archive)
 
 ## 💡 Usage Examples
 
@@ -264,29 +291,24 @@ print(f"Best solution: {result['best_x']}")
 print(f"Best value: {result['best_y']}")
 ```
 
-### Example 2: Algorithm Comparison
+### Example 2: AFN-CMA-ES on BBOB Function
 
 ```python
-from afn.afn_core import AFNCore
-from afn.comparison_algorithms import GA, PSO, ACO
-import numpy as np
+from data.sample import load_bbob_function
+from afn.cmaes_variants import AFN_CMA
 
-def rosenbrock(x):
-    return np.sum(100.0 * (x[1:] - x[:-1]**2)**2 + (1 - x[:-1])**2)
+# Load BBOB function
+problem, info = load_bbob_function(func_id=1, dimension=2, instance=1)
+print(info)
 
-bounds = [(-2.048, 2.048), (-2.048, 2.048)]
+# Set up AFN-CMA-ES with BBOB bounds
+bounds = [(problem.lower_bounds[i], problem.upper_bounds[i]) for i in range(2)]
+afn_cma = AFN_CMA(bounds=bounds, max_evaluations=100, model_type='mlp')
 
-# Test all algorithms
-algorithms = {
-    'AFN': AFNCore(input_dim=2, bounds=bounds, max_evaluations=100),
-    'GA': GA(bounds=bounds, max_generations=100),
-    'PSO': PSO(bounds=bounds, max_iterations=100),
-    'ACO': ACO(bounds=bounds, max_iterations=100)
-}
-
-for name, alg in algorithms.items():
-    result = alg.optimize(rosenbrock, verbose=False)
-    print(f"{name}: {result['best_y']:.6f}")
+# Optimize
+result = afn_cma.optimize(problem, verbose=True)
+print(f"Best solution: {result['best_x']}")
+print(f"Best value: {result['best_y']}")
 ```
 
 ### Example 3: BBOB Function Testing
@@ -315,7 +337,6 @@ final-repo/
 │   ├── __init__.py                         # Package initialization
 │   ├── afn_core.py                         # Main AFN implementation
 │   ├── cmaes_variants.py                   # CMA-ES variants with surrogate models
-│   ├── comparison_algorithms.py            # GA, PSO, ACO implementations
 │   └── simple_test_functions.py            # Standard test functions (no COCO)
 ├── data/                                   # Data utilities
 │   ├── __init__.py                         # Package initialization
@@ -327,13 +348,10 @@ final-repo/
 │   └── helpers.py                          # Helper functions
 ├── models/                                 # Model implementations
 │   └── __init__.py                         # Package initialization
-├── run_afn_ga_pso_aco_comparison.py        # AFN vs GA/PSO/ACO comparison
-├── run_cmaes_comparison.py                 # AFN vs CMA-ES variants comparison
-├── run_afn_hansen_bajer_comparison.py      # AFN vs Hansen/Bajer comparison
+├── run_afn.py                              # AFN-CMA-ES experiments (main script)
 ├── test_afn.py                             # Test suite
 ├── example_usage.py                        # Usage examples
 ├── requirements.txt                        # Python dependencies
-├── requirements_hansen_bajer.txt           # Additional dependencies for Hansen/Bajer
 └── README.md                              # This file
 ```
 
@@ -400,16 +418,6 @@ The AFN uses a **5-model Random Forest ensemble** with the following characteris
    - Adaptive trust regions
    - Reference: Loshchilov et al., 2012
 
-#### Hansen CMA-ES
-- **Implementation**: Covariance Matrix Adaptation Evolution Strategy
-- **Features**: Bound constraints, population size 20, adaptive step size
-- **Reference**: Hansen, 2019 (global linear/quad surrogate; rank-corr gating)
-
-#### Bajer GP-EI
-- **Implementation**: Gaussian Process with Expected Improvement acquisition
-- **Features**: GP surrogate with EI-driven candidate selection
-- **Reference**: Bajer et al., 2019 (GP uncertainty, EI-driven selection)
-
 ## 📊 Available Test Functions (COCO/BBOB Benchmark Suite)
 
 | ID | Function Name | Description | Type |
@@ -434,99 +442,49 @@ The comparison computes 5 key metrics:
 
 ### Generated Outputs
 
-#### AFN vs GA/PSO/ACO Comparison Output
-
-```
-results/afn_ga_pso_aco_YYYYMMDD_HHMMSS/
-├── runs.json                    # Raw results from all runs
-├── metrics_summary.json         # Computed metrics and statistics
-├── config.json                  # Configuration used
-├── convergence_speed.png        # Convergence speed comparison
-├── optimization_accuracy.png    # Optimization accuracy comparison
-├── resource_utilization.png     # Resource utilization comparison
-├── exploitation_balance.png     # Exploitation balance comparison
-└── robustness.png              # Robustness comparison
-```
-
-#### CMA-ES Variants Comparison Output
+#### AFN-CMA-ES Experiment Output
 
 ```
 results/cmaes_comparison_YYYYMMDD_HHMMSS/
-├── runs.json                    # Raw results from all runs
-├── metrics_summary.json         # Computed metrics and statistics
-├── config.json                  # Configuration used
-├── convergence_curves.png       # Convergence curves for all algorithms
-├── cdf_1e-8.png                 # COCO CDF plot (target precision: 1e-8)
-├── cdf_1e-5.png                 # COCO CDF plot (target precision: 1e-5)
-├── cdf_1e-2.png                 # COCO CDF plot (target precision: 1e-2)
-├── cdf_multiple_targets.png     # COCO CDF plots (4 target precisions)
-└── performance_profile.png      # Performance profile comparison
+├── coco_logs/                   # COCO-compliant output files
+│   └── coco_logs-XXXX/          # Individual run logs
+│       └── data_fN/             # Function-specific data
+│           └── *.dat            # COCO data files
+└── coco_archive/                 # Placeholder for COCO archive datasets
 ```
 
-#### Hansen & Bajer Comparison Output
-
+**After running cocopp (Step 6):**
 ```
-results/afn_hansen_bajer_YYYYMMDD_HHMMSS/
-├── results.json                 # Raw results from all runs
-├── metrics_summary.json         # Computed metrics and statistics
-├── config.json                  # Configuration used
-├── convergence_curves.png       # Convergence curves for all algorithms
-├── cdf_1e-8.png                 # COCO CDF plot (target precision: 1e-8)
-├── cdf_1e-5.png                 # COCO CDF plot (target precision: 1e-5)
-├── cdf_1e-2.png                 # COCO CDF plot (target precision: 1e-2)
-├── cdf_multiple_targets.png     # COCO CDF plots (4 target precisions)
-└── performance_profile.png      # Performance profile comparison
+compares/ppdata/
+├── index.html                    # Open this in browser!
+├── *.pdf                         # Comparison plots (ECDF, etc.)
+└── *.tex                         # LaTeX comparison tables
 ```
 
 ### Command Parameters
 
-#### AFN vs GA/PSO/ACO Comparison (`run_afn_ga_pso_aco_comparison.py`)
+#### AFN-CMA-ES Experiment (`run_afn.py`)
 
 | Parameter | Description | Default | Example |
 |-----------|-------------|---------|---------|
-| `--functions` | Test function IDs | `1,2,3` | `1,2,3,4,5` |
-| `--dimensions` | Problem dimensions | `2,5` | `2,5,10,20` |
-| `--n_runs` | Runs per test case | `10` | `20`, `30`, `50` |
-| `--max_evals` | Max evaluations | `100` | `200`, `500` |
-| `--output_dir` | Results directory | `results` | `my_results` |
-| `--verbose` | Detailed output | `False` | Flag |
-
-#### CMA-ES Variants Comparison (`run_cmaes_comparison.py`)
-
-| Parameter | Description | Default | Example |
-|-----------|-------------|---------|---------|
-| `--algorithms` | Algorithms to run | `AFN,CMA-ES` | `all`, `AFN-CMA-ES` |
+| `--algorithms` | Algorithms to run | `AFN,CMA-ES` | `AFN-CMA-ES` |
 | `--functions` | Test function IDs | `1,2,3` | `1-24`, `8,23` |
-| `--dimensions` | Problem dimensions | `2,5` | `2,5,10,20` |
-| `--n_runs` | Runs per test case | `10` | `20`, `30` |
-| `--max_evals` | Max evaluations | `200` | `500`, `1000` |
-| `--model_type` | Surrogate model | `random_forest` | `mlp` |
+| `--dimensions` | Problem dimensions | `2,5` | `2,5,10,20,40` |
+| `--n_runs` | Runs per test case | `10` | `15`, `30` |
+| `--max_evals` | Max evaluations | `200` | `5000`, `10000` |
+| `--model_type` | Surrogate model | `mlp` | `mlp` (paper requirement) |
 | `--output_dir` | Results directory | `results` | `my_results` |
 | `--verbose` | Detailed output | `False` | Flag |
-
-#### Hansen & Bajer Comparison (`run_afn_hansen_bajer_comparison.py`)
-
-| Parameter | Description | Default | Example |
-|-----------|-------------|---------|---------|
-| `--functions` | Test function IDs | `8,23` | `1-24`, `1,8` |
-| `--dimensions` | Problem dimensions | `2,5,10,20` | `2,5` |
-| `--n_runs` | Independent runs | `30` | `10`, `50` |
-| `--max_evals` | Max evaluations | `10000` | `2000`, `5000` |
-| `--target_precision` | Target precision | `1e-8` | `1e-5`, `1e-10` |
-| `--model_type` | Surrogate model | `random_forest` | `mlp` |
-| `--output_dir` | Results directory | `results` | `my_results` |
-| `--verbose` | Detailed output | `False` | Flag |
-| `--quick` | Quick test mode | `False` | Flag |
 
 ### Expected Results
 
-Based on the ensemble implementation, AFN should demonstrate:
+Based on the ensemble implementation, AFN-CMA-ES should demonstrate:
 
-- **Superior convergence speed** compared to GA, PSO, ACO
-- **Higher optimization accuracy** across different functions
+- **Efficient optimization** using MLP surrogate models
+- **Higher optimization accuracy** across different BBOB functions
 - **Better resource utilization** with fewer expensive evaluations
 - **Improved robustness** across multiple runs
-- **Faster execution** compared to neural network surrogates
+- **COCO-compliant results** for fair comparison with baseline algorithms
 
 ## 🐛 Troubleshooting
 
@@ -627,7 +585,5 @@ This project is for research and educational purposes. Please cite the original 
 
 **🎉 Ready to run AFN optimization!**
 
-Quick start commands:
-- **GA/PSO/ACO comparison**: `python run_afn_ga_pso_aco_comparison.py --functions 1 --dimensions 2 --n_runs 3`
-- **CMA-ES comparison**: `python run_cmaes_comparison.py --algorithms AFN,CMA-ES --functions 1,2,3 --dimensions 2,5`
-- **Hansen/Bajer comparison**: `python run_afn_hansen_bajer_comparison.py --quick`
+Quick start command:
+- **AFN-CMA-ES experiment**: `python run_afn.py --algorithms AFN-CMA-ES --functions 1-24 --dimensions 2,5,10,20,40 --n_runs 15 --max_evals 5000 --verbose`
