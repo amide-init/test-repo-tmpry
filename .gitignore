@@ -2,3 +2,13 @@
 __pycache__/
 **/__pycache__/
 results/**/runs.json
+exdata
+data/coco-archive/
+compares/AFN-CMA-ES/
+compares/CMA-ES-2019/
+compares/LQ-CMA-ES/
+compares/DTS-CMA-ES/
+compares/LMM-CMA-ES/
+compares/LMM-CMA-ES/
+compares/AFN-CMA-ES-100/
+compares/AFN-CMA-ES-1000/
